@@ -1,0 +1,383 @@
+
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#100b20">
+<title>VibeChat - Tanış, Sohbet Et!</title>
+
+<style>
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    min-height: 100vh;
+    background: #100b20;
+    color: white;
+    font-family: Arial, sans-serif;
+}
+
+header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 7%;
+    border-bottom: 1px solid #302044;
+}
+
+.logo {
+    font-size: 28px;
+    font-weight: 900;
+    color: white;
+}
+
+.logo span {
+    color: #a855f7;
+}
+
+.online {
+    color: #4ade80;
+    font-size: 14px;
+}
+
+main {
+    max-width: 1100px;
+    margin: auto;
+    padding: 45px 20px;
+}
+
+.hero {
+    text-align: center;
+    margin-bottom: 35px;
+}
+
+.hero h1 {
+    font-size: clamp(32px, 6vw, 52px);
+    margin: 10px 0;
+}
+
+.hero h1 span {
+    color: #a855f7;
+}
+
+.hero p {
+    color: #b9a9ce;
+    font-size: 16px;
+}
+
+.status {
+    background: #211631;
+    border: 1px solid #56347a;
+    border-radius: 14px;
+    padding: 14px;
+    text-align: center;
+    margin-bottom: 20px;
+    color: #d8b4fe;
+}
+
+.videos {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+}
+
+.video-card {
+    background: #20152e;
+    padding: 10px;
+    border-radius: 20px;
+    border: 1px solid #50316d;
+    position: relative;
+}
+
+.video-card video {
+    width: 100%;
+    aspect-ratio: 16 / 10;
+    object-fit: cover;
+    background: #080610;
+    border-radius: 14px;
+}
+
+.video-label {
+    padding: 10px 4px 4px;
+    color: #d8b4fe;
+    font-size: 14px;
+}
+
+.controls {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 12px;
+    margin-top: 25px;
+}
+
+button {
+    border: 0;
+    padding: 15px 22px;
+    border-radius: 13px;
+    font-weight: bold;
+    font-size: 15px;
+    cursor: pointer;
+    color: white;
+    transition: .2s;
+}
+
+button:hover {
+    transform: translateY(-2px);
+    filter: brightness(1.15);
+}
+
+.camera {
+    background: #47316a;
+}
+
+.match {
+    background: linear-gradient(120deg,#9333ea,#5b21b6);
+}
+
+.next {
+    background: #087ea4;
+}
+
+footer {
+    text-align: center;
+    padding: 30px 15px;
+    color: #81718f;
+    font-size: 13px;
+}
+
+@media(max-width:650px) {
+    header {
+        padding: 18px;
+    }
+
+    main {
+        padding: 30px 14px;
+    }
+
+    .videos {
+        grid-template-columns: 1fr;
+    }
+
+    button {
+        width: 100%;
+    }
+}
+</style>
+</head>
+
+<body>
+
+<header>
+    <div class="logo">Vibe<span>Chat</span> ✨</div>
+    <div class="online">● Sosyal sohbet</div>
+</header>
+
+<main>
+
+<section class="hero">
+    <h1>Yeni insanlarla <span>tanış!</span></h1>
+    <p>Bağlan, sohbet et ve yeni arkadaşlıklar keşfet.</p>
+</section>
+
+<div class="status" id="status">
+    VibeChat'e hoş geldin! Sohbete hazırsın.
+</div>
+
+<section class="videos">
+
+    <div class="video-card">
+        <video id="localVideo" autoplay muted playsinline></video>
+        <div class="video-label">📷 Senin kameran</div>
+    </div>
+
+    <div class="video-card">
+        <video id="remoteVideo" autoplay playsinline></video>
+        <div class="video-label">🌎 Sohbet arkadaşın</div>
+    </div>
+
+</section>
+
+<div class="controls">
+    <button class="camera" onclick="startCamera()">
+        📷 Kamerayı Aç
+    </button>
+
+    <button class="match" onclick="findPartner()">
+        🎲 Rastgele Kişi Bul
+    </button>
+
+    <button class="next" onclick="nextPerson()">
+        ⏭️ Sonraki Kişi
+    </button>
+</div>
+
+</main>
+
+<footer>
+    © 2026 VibeChat · Tanış. Sohbet Et. Eğlen.
+</footer>
+
+<script src="/socket.io/socket.io.js"></script>
+
+<script>
+const socket = io();
+
+let localStream;
+let peerConnection;
+let partnerId;
+let pendingCandidates = [];
+
+const config = {
+    iceServers: [
+        { urls: "stun:stun.l.google.com:19302" }
+    ]
+};
+
+async function startCamera() {
+    try {
+        localStream = await navigator.mediaDevices.getUserMedia({
+            video: true,
+            audio: true
+        });
+
+        document.getElementById("localVideo").srcObject = localStream;
+        document.getElementById("status").textContent =
+            "Kamera hazır! Şimdi kişi bulabilirsin.";
+
+    } catch (error) {
+        alert("Kamera açılamadı: " + error.message);
+    }
+}
+
+function createConnection() {
+    peerConnection = new RTCPeerConnection(config);
+
+    localStream.getTracks().forEach(track => {
+        peerConnection.addTrack(track, localStream);
+    });
+
+    peerConnection.ontrack = event => {
+        document.getElementById("remoteVideo").srcObject =
+            event.streams[0];
+    };
+
+    peerConnection.onicecandidate = event => {
+        if (event.candidate && partnerId) {
+            socket.emit("signal", {
+                to: partnerId,
+                signal: { candidate: event.candidate }
+            });
+        }
+    };
+
+    peerConnection.onconnectionstatechange = () => {
+        if (peerConnection) {
+            document.getElementById("status").textContent =
+                "Bağlantı: " + peerConnection.connectionState;
+        }
+    };
+}
+
+async function findPartner() {
+    if (!localStream) {
+        alert("Önce kameranı açmalısın.");
+        return;
+    }
+
+    document.getElementById("status").textContent =
+        "Yeni bir kişi aranıyor...";
+
+    socket.emit("randomMatch");
+}
+
+async function nextPerson() {
+    if (peerConnection) {
+        peerConnection.close();
+        peerConnection = null;
+    }
+
+    partnerId = null;
+    pendingCandidates = [];
+
+    document.getElementById("remoteVideo").srcObject = null;
+
+    await findPartner();
+}
+
+socket.on("waiting", () => {
+    document.getElementById("status").textContent =
+        "Bir kişi bekleniyor...";
+});
+
+socket.on("matched", async data => {
+    partnerId = data.peerId;
+
+    createConnection();
+
+    document.getElementById("status").textContent =
+        "Bir kişi bulundu! Bağlanılıyor...";
+
+    if (data.initiator) {
+        const offer = await peerConnection.createOffer();
+        await peerConnection.setLocalDescription(offer);
+
+        socket.emit("signal", {
+            to: partnerId,
+            signal: {
+                description: peerConnection.localDescription
+            }
+        });
+    }
+});
+
+socket.on("signal", async data => {
+    if (!peerConnection || data.from !== partnerId) return;
+
+    try {
+        if (data.signal.description) {
+            const description = data.signal.description;
+
+            await peerConnection.setRemoteDescription(description);
+
+            if (description.type === "offer") {
+                const answer = await peerConnection.createAnswer();
+                await peerConnection.setLocalDescription(answer);
+
+                socket.emit("signal", {
+                    to: partnerId,
+                    signal: {
+                        description: peerConnection.localDescription
+                    }
+                });
+            }
+
+            for (const candidate of pendingCandidates) {
+                await peerConnection.addIceCandidate(candidate);
+            }
+
+            pendingCandidates = [];
+        }
+
+        if (data.signal.candidate) {
+            const candidate =
+                new RTCIceCandidate(data.signal.candidate);
+
+            if (peerConnection.remoteDescription) {
+                await peerConnection.addIceCandidate(candidate);
+            } else {
+                pendingCandidates.push(candidate);
+            }
+        }
+
+    } catch (error) {
+        console.error("Bağlantı hatası:", error);
+    }
+});
+</script>
+
+</body>
+</html>
