@@ -1,0 +1,257 @@
+
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Arkadaşlarım | VibeChat</title>
+<style>
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  padding: 20px;
+  background: #101827;
+  color: white;
+  font-family: Arial, sans-serif;
+}
+main { max-width: 650px; margin: auto; }
+h1 { color: #a78bfa; }
+section {
+  background: #1e293b;
+  padding: 20px;
+  border-radius: 14px;
+  margin: 18px 0;
+}
+input {
+  padding: 12px;
+  border-radius: 8px;
+  border: none;
+  width: 65%;
+}
+button, a.btn {
+  background: #7c3aed;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 11px;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-block;
+  margin: 4px;
+}
+.item {
+  padding: 12px 0;
+  border-bottom: 1px solid #475569;
+}
+small { color: #cbd5e1; }
+</style>
+</head>
+<body>
+<main>
+  <a class="btn" href="/">← Ana sayfa</a>
+  <h1>💜 VibeChat Arkadaşlar</h1>
+  <p id="message">Hesabın kontrol ediliyor...</p>
+
+  <section>
+    <h2>🔎 Arkadaş ara</h2>
+    <input id="search" placeholder="Kullanıcı adı">
+    <button onclick="searchUsers()">Ara</button>
+    <div id="results"></div>
+  </section>
+
+  <section>
+    <h2>📩 Gelen istekler</h2>
+    <div id="requests"></div>
+  </section>
+
+  <section>
+    <h2>👥 Arkadaşlarım</h2>
+    <div id="friends"></div>
+  </section>
+</main>
+
+<script type="module">
+import { createClient } from
+  "https://esm.sh/@supabase/supabase-js@2";
+
+const supabase = createClient(
+  "https://orznejzevoclmjqfulzh.supabase.co",
+  "sb_publishable_GnGvKSlRTKL_PUzUAJtatw_uFg2GeP4"
+);
+
+let me = null;
+const el = id => document.getElementById(id);
+
+function showMessage(text) {
+  el("message").textContent = text;
+}
+
+function makeItem(name, actions = []) {
+  const div = document.createElement("div");
+  div.className = "item";
+
+  const label = document.createElement("strong");
+  label.textContent = "👤 " + name;
+  div.append(label);
+
+  for (const action of actions) {
+    const button = document.createElement("button");
+    button.textContent = action.label;
+    button.onclick = action.run;
+    div.append(button);
+  }
+  return div;
+}
+
+async function load() {
+  const { data: { user } } =
+    await supabase.auth.getUser();
+
+  if (!user) {
+    location.href = "/login.html";
+    return;
+  }
+
+  me = user.id;
+  showMessage("Arkadaşlık sistemine hoş geldin!");
+  await refresh();
+}
+
+window.searchUsers = async function() {
+  const name = el("search").value.trim();
+  if (name.length < 2) {
+    showMessage("En az 2 harf yaz.");
+    return;
+  }
+
+  const { data, error } = await supabase.rpc(
+    "search_vibechat_users",
+    { search_name: name }
+  );
+
+  if (error) {
+    showMessage("Arama hatası: " + error.message);
+    return;
+  }
+
+  el("results").replaceChildren();
+
+  if (!data?.length) {
+    el("results").textContent = "Kullanıcı bulunamadı.";
+    return;
+  }
+
+  for (const user of data) {
+    el("results").append(makeItem(user.username, [{
+      label: "➕ İstek gönder",
+      run: () => sendRequest(user.id)
+    }]));
+  }
+};
+
+async function sendRequest(receiverId) {
+  const { error } = await supabase
+    .from("friendships")
+    .insert({
+      sender_id: me,
+      receiver_id: receiverId,
+      status: "pending"
+    });
+
+  showMessage(error
+    ? "İstek gönderilemedi: " + error.message
+    : "Arkadaşlık isteği gönderildi!");
+  await refresh();
+}
+
+async function acceptRequest(id) {
+  const { error } = await supabase
+    .from("friendships")
+    .update({ status: "accepted" })
+    .eq("id", id)
+    .eq("receiver_id", me);
+
+  showMessage(error
+    ? "İstek kabul edilemedi: " + error.message
+    : "Artık arkadaşsınız!");
+  await refresh();
+}
+
+async function deleteFriendship(id) {
+  const { error } = await supabase
+    .from("friendships")
+    .delete()
+    .eq("id", id);
+
+  showMessage(error
+    ? "İşlem başarısız: " + error.message
+    : "İşlem tamamlandı.");
+  await refresh();
+}
+
+async function refresh() {
+  const { data, error } = await supabase
+    .from("friendships")
+    .select("id,sender_id,receiver_id,status")
+    .or(`sender_id.eq.${me},receiver_id.eq.${me}`);
+
+  if (error) {
+    showMessage("Liste hatası: " + error.message);
+    return;
+  }
+
+  const rows = data || [];
+  const ids = [...new Set(rows.map(r =>
+    r.sender_id === me ? r.receiver_id : r.sender_id
+  ))];
+
+  let names = {};
+  if (ids.length) {
+    const { data: profiles } = await supabase
+      .from("profiles")
+      .select("id,username")
+      .in("id", ids);
+
+    for (const p of profiles || []) {
+      names[p.id] = p.username;
+    }
+  }
+
+  el("requests").replaceChildren();
+  el("friends").replaceChildren();
+
+  let requestCount = 0;
+  let friendCount = 0;
+
+  for (const r of rows) {
+    const otherId = r.sender_id === me
+      ? r.receiver_id : r.sender_id;
+    const name = names[otherId] || "Kullanıcı";
+
+    if (r.status === "pending" && r.receiver_id === me) {
+      requestCount++;
+      el("requests").append(makeItem(name, [
+        { label: "✅ Kabul et", run: () => acceptRequest(r.id) },
+        { label: "❌ Reddet", run: () => deleteFriendship(r.id) }
+      ]));
+    }
+
+    if (r.status === "accepted") {
+      friendCount++;
+      el("friends").append(makeItem(name, [{
+        label: "Arkadaşlıktan çıkar",
+        run: () => deleteFriendship(r.id)
+      }]));
+    }
+  }
+
+  if (!requestCount)
+    el("requests").textContent = "Gelen istek yok.";
+  if (!friendCount)
+    el("friends").textContent = "Henüz arkadaşın yok.";
+}
+
+load();
+</script>
+</body>
+</html>
