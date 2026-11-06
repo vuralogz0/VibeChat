@@ -1,5 +1,6 @@
 
    
+
 <!DOCTYPE html>
 <html lang="tr">
 <head>
@@ -26,6 +27,7 @@ header {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    flex-wrap: wrap;
     gap: 12px;
     padding: 20px 5%;
     background: rgba(8,7,25,.5);
@@ -39,9 +41,22 @@ header {
 }
 .logo span { color: #c084fc; }
 
+.account {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
 .online {
     font-size: 13px;
     color: #86efac;
+}
+
+#userEmail {
+    font-size: 13px;
+    color: #e9d5ff;
+    overflow-wrap: anywhere;
 }
 
 main {
@@ -54,11 +69,13 @@ main {
     text-align: center;
     margin-bottom: 28px;
 }
+
 .hero h1 {
     font-size: clamp(32px,6vw,55px);
     margin: 10px 0;
     text-shadow: 0 3px 20px #000;
 }
+
 .hero h1 span { color: #d8b4fe; }
 .hero p { color: #e9d5ff; }
 
@@ -144,9 +161,12 @@ button {
 }
 
 button:hover { filter: brightness(1.15); }
+button:disabled { opacity: .5; cursor: not-allowed; }
+
 .camera { background: #514178; }
 .match { background: linear-gradient(120deg,#9333ea,#6d28d9); }
 .next { background: #087ea4; }
+.logout { background: #7c3aed; padding: 10px 14px; }
 
 .timer {
     margin-top: 20px;
@@ -156,10 +176,9 @@ button:hover { filter: brightness(1.15); }
     color: #e9d5ff;
 }
 
-.chat {
-    margin-top: 22px;
-}
+.chat { margin-top: 22px; }
 .chat h3 { margin-top: 0; }
+
 .messages {
     height: 110px;
     overflow-y: auto;
@@ -169,11 +188,13 @@ button:hover { filter: brightness(1.15); }
     color: #c4b5fd;
     font-size: 14px;
 }
+
 .chat-input {
     display: flex;
     gap: 10px;
     margin-top: 12px;
 }
+
 .chat-input input { flex: 1; min-width: 0; }
 
 .notice {
@@ -190,6 +211,8 @@ footer {
     font-size: 13px;
 }
 
+#app { display: none; }
+
 @media(max-width:650px) {
     .videos { grid-template-columns: 1fr; }
     .controls button { flex: 1 1 100%; }
@@ -201,9 +224,14 @@ footer {
 </head>
 <body>
 
+<div id="app">
 <header>
     <div class="logo">Vibe<span>Chat</span> ✨</div>
-    <div class="online">● Test sürümü</div>
+    <div class="account">
+        <span class="online">● Test sürümü</span>
+        <span id="userEmail"></span>
+        <button class="logout" id="logoutBtn">Çıkış Yap</button>
+    </div>
 </header>
 
 <main>
@@ -266,17 +294,62 @@ footer {
 </main>
 
 <footer>© 2026 VibeChat · Tanış. Sohbet Et. Eğlen.</footer>
+</div>
 
-<script src="/socket.io/socket.io.js"></script>
-<script>
-const socket = io();
+<script type="module">
+import { createClient } from
+    "https://esm.sh/@supabase/supabase-js@2";
+
+const supabase = createClient(
+    "https://orznejzevoclmjqfulzh.supabase.co",
+    "sb_publishable_GnGvKSlRTKL_PUzUAJtatw_uFg2GeP4"
+);
+
+const app = document.getElementById("app");
+const userEmail = document.getElementById("userEmail");
+const logoutBtn = document.getElementById("logoutBtn");
 
 let localStream = null;
-
 const statusBox = document.getElementById("status");
 const localVideo = document.getElementById("localVideo");
 
-async function startCamera() {
+async function checkLogin() {
+    try {
+        const { data, error } = await supabase.auth.getUser();
+
+        if (error || !data.user) {
+            window.location.replace("/login.html");
+            return;
+        }
+
+        userEmail.textContent = "👤 " + (data.user.email || "Hesabım");
+        app.style.display = "block";
+    } catch (error) {
+        console.error("Oturum kontrolü başarısız:", error);
+        window.location.replace("/login.html");
+    }
+}
+
+logoutBtn.addEventListener("click", async () => {
+    logoutBtn.disabled = true;
+
+    try {
+        if (localStream) {
+            localStream.getTracks().forEach(track => track.stop());
+            localStream = null;
+        }
+
+        const { error } = await supabase.auth.signOut();
+        if (error) throw error;
+
+        window.location.replace("/login.html");
+    } catch (error) {
+        alert("Çıkış yapılamadı. Tekrar dene.");
+        logoutBtn.disabled = false;
+    }
+});
+
+window.startCamera = async function () {
     try {
         if (localStream) {
             localStream.getTracks().forEach(track => track.stop());
@@ -292,30 +365,19 @@ async function startCamera() {
     } catch (error) {
         statusBox.textContent = "Kamera açılamadı: " + error.message;
     }
-}
+};
 
-function findPartner() {
+window.findPartner = function () {
     statusBox.textContent =
         "Güvenlik kontrolleri tamamlanana kadar eşleşme kapalı.";
-}
+};
 
-function nextPerson() {
+window.nextPerson = function () {
     statusBox.textContent =
         "Sonraki kişi özelliği test aşamasında.";
-}
+};
 
-socket.on("statusMessage", data => {
-    if (data && data.message) {
-        statusBox.textContent = data.message;
-    }
-});
-
-socket.on("chatEnded", () => {
-    document.getElementById("remoteVideo").srcObject = null;
-    document.getElementById("timer").textContent = "05:00";
-    statusBox.textContent = "Görüşme sona erdi.";
-});
+checkLogin();
 </script>
 </body>
 </html>
-
