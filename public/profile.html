@@ -1,0 +1,297 @@
+
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Profilim | VibeChat</title>
+<style>
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  min-height: 100vh;
+  padding: 24px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-family: Arial, sans-serif;
+  color: white;
+  background:
+    linear-gradient(135deg,rgba(8,7,30,.65),rgba(25,8,50,.85)),
+    url("/a_stunning_night_landscape_a_realistic_cinematic.png")
+    center / cover fixed;
+}
+.card {
+  width: 100%;
+  max-width: 440px;
+  padding: 30px;
+  background: rgba(15,12,40,.88);
+  border: 1px solid #a855f766;
+  border-radius: 24px;
+  text-align: center;
+  box-shadow: 0 20px 60px #0008;
+}
+h1 { margin-top: 0; }
+h1 span { color: #c084fc; }
+.avatar {
+  width: 125px;
+  height: 125px;
+  margin: 18px auto;
+  border-radius: 50%;
+  object-fit: cover;
+  background: #292042;
+  border: 3px solid #a855f7;
+}
+label {
+  display: block;
+  text-align: left;
+  margin: 18px 0 8px;
+}
+input {
+  width: 100%;
+  padding: 13px;
+  border-radius: 12px;
+  border: 1px solid #7654a3;
+  background: #17142e;
+  color: white;
+}
+button {
+  width: 100%;
+  padding: 14px;
+  margin-top: 14px;
+  border: 0;
+  border-radius: 12px;
+  background: linear-gradient(120deg,#9333ea,#6d28d9);
+  color: white;
+  font-size: 15px;
+  font-weight: bold;
+  cursor: pointer;
+}
+button:disabled { opacity: .5; cursor: wait; }
+.secondary { background: #514178; }
+a { color: #d8b4fe; }
+#message { min-height: 20px; color: #e9d5ff; }
+#profile { display: none; }
+small { color: #ddd6fe; }
+</style>
+</head>
+<body>
+
+<div class="card">
+  <h1>Vibe<span>Chat</span> ✨</h1>
+  <h2>👤 Profilim</h2>
+  <p id="message" role="status">Hesap kontrol ediliyor...</p>
+
+  <div id="profile">
+    <img id="avatar" class="avatar"
+      alt="Profil fotoğrafı"
+      src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%23292042'/%3E%3Ccircle cx='50' cy='38' r='19' fill='%23c4b5fd'/%3E%3Cellipse cx='50' cy='91' rx='35' ry='30' fill='%23c4b5fd'/%3E%3C/svg%3E">
+
+    <p id="email"></p>
+
+    <label for="username">Kullanıcı adı</label>
+    <input id="username" maxlength="20"
+      placeholder="Kullanıcı adını yaz"
+      autocomplete="off">
+
+    <button id="saveBtn">💾 Profili Kaydet</button>
+
+    <label for="photo">Profil fotoğrafı seç</label>
+    <input id="photo" type="file"
+      accept="image/jpeg,image/png,image/webp">
+
+    <small>JPG, PNG veya WEBP — en fazla 2 MB</small>
+
+    <button id="uploadBtn">📸 Fotoğrafı Yükle</button>
+    <button id="deleteBtn" class="secondary">
+      🗑️ Fotoğrafı Sil
+    </button>
+
+    <p><a href="/">← Ana sayfaya dön</a></p>
+  </div>
+</div>
+
+<script type="module">
+import { createClient } from
+  "https://esm.sh/@supabase/supabase-js@2";
+
+const supabase = createClient(
+  "https://orznejzevoclmjqfulzh.supabase.co",
+  "sb_publishable_GnGvKSlRTKL_PUzUAJtatw_uFg2GeP4"
+);
+
+const $ = id => document.getElementById(id);
+const message = $("message");
+const avatar = $("avatar");
+const placeholder = avatar.src;
+let user = null;
+let photoPath = null;
+
+function showMessage(text) {
+  message.textContent = text;
+}
+
+async function loadAvatar() {
+  avatar.src = placeholder;
+  if (!photoPath) return;
+
+  const { data, error } = await supabase.storage
+    .from("avatars")
+    .createSignedUrl(photoPath, 3600);
+
+  if (!error && data?.signedUrl) {
+    avatar.src = data.signedUrl;
+  }
+}
+
+async function init() {
+  try {
+    const { data, error } = await supabase.auth.getUser();
+
+    if (error || !data.user) {
+      window.location.replace("/login.html");
+      return;
+    }
+
+    user = data.user;
+    $("email").textContent = user.email || "";
+
+    const result = await supabase
+      .from("profiles")
+      .select("username,avatar_url")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    if (result.error) throw result.error;
+
+    if (result.data) {
+      $("username").value = result.data.username || "";
+      photoPath = result.data.avatar_url;
+    }
+
+    await loadAvatar();
+    $("profile").style.display = "block";
+    showMessage("Profilin hazır!");
+  } catch (error) {
+    showMessage("Profil yüklenemedi: " + error.message);
+  }
+}
+
+$("saveBtn").addEventListener("click", async () => {
+  if (!user) return;
+
+  const username = $("username").value.trim();
+
+  if (!/^[a-zA-Z0-9_]{3,20}$/.test(username)) {
+    showMessage(
+      "Kullanıcı adı 3-20 karakter olmalı. Harf, rakam ve _ kullan."
+    );
+    return;
+  }
+
+  $("saveBtn").disabled = true;
+
+  try {
+    const { error } = await supabase
+      .from("profiles")
+      .upsert({
+        id: user.id,
+        username
+      }, { onConflict: "id" });
+
+    if (error) throw error;
+    showMessage("Kullanıcı adın kaydedildi! ✅");
+  } catch (error) {
+    showMessage("Kaydedilemedi: " + error.message);
+  } finally {
+    $("saveBtn").disabled = false;
+  }
+});
+
+$("uploadBtn").addEventListener("click", async () => {
+  if (!user) return;
+
+  const file = $("photo").files[0];
+
+  if (!file) {
+    showMessage("Önce bir fotoğraf seç.");
+    return;
+  }
+
+  const types = {
+    "image/jpeg": "jpg",
+    "image/png": "png",
+    "image/webp": "webp"
+  };
+
+  if (!types[file.type] || file.size > 2 * 1024 * 1024) {
+    showMessage("JPG, PNG veya WEBP seç. En fazla 2 MB.");
+    return;
+  }
+
+  $("uploadBtn").disabled = true;
+
+  const path = `${user.id}/avatar.${types[file.type]}`;
+
+  try {
+    const upload = await supabase.storage
+      .from("avatars")
+      .upload(path, file, {
+        upsert: true,
+        contentType: file.type
+      });
+
+    if (upload.error) throw upload.error;
+
+    const save = await supabase
+      .from("profiles")
+      .upsert({
+        id: user.id,
+        avatar_url: path
+      }, { onConflict: "id" });
+
+    if (save.error) throw save.error;
+
+    photoPath = path;
+    await loadAvatar();
+    showMessage("Profil fotoğrafın yüklendi! ✅");
+  } catch (error) {
+    showMessage("Fotoğraf yüklenemedi: " + error.message);
+  } finally {
+    $("uploadBtn").disabled = false;
+  }
+});
+
+$("deleteBtn").addEventListener("click", async () => {
+  if (!user || !photoPath) return;
+
+  $("deleteBtn").disabled = true;
+
+  try {
+    const remove = await supabase.storage
+      .from("avatars")
+      .remove([photoPath]);
+
+    if (remove.error) throw remove.error;
+
+    const update = await supabase
+      .from("profiles")
+      .update({ avatar_url: null })
+      .eq("id", user.id);
+
+    if (update.error) throw update.error;
+
+    photoPath = null;
+    avatar.src = placeholder;
+    showMessage("Fotoğraf silindi. ✅");
+  } catch (error) {
+    showMessage("Silinemedi: " + error.message);
+  } finally {
+    $("deleteBtn").disabled = false;
+  }
+});
+
+init();
+</script>
+</body>
+</html>
