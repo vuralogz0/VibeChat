@@ -1,6 +1,7 @@
 
    
 
+
 <!DOCTYPE html>
 <html lang="tr">
 <head>
@@ -53,8 +54,35 @@ header {
     color: #86efac;
 }
 
+.profile-link {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    color: white;
+    text-decoration: none;
+    background: #ffffff18;
+    border: 1px solid #a855f766;
+    padding: 6px 12px 6px 6px;
+    border-radius: 30px;
+    font-size: 14px;
+    font-weight: bold;
+}
+
+.profile-link:hover {
+    background: #a855f744;
+}
+
+.profile-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    object-fit: cover;
+    background: #292042;
+    border: 2px solid #c084fc;
+}
+
 #userEmail {
-    font-size: 13px;
+    font-size: 12px;
     color: #e9d5ff;
     overflow-wrap: anywhere;
 }
@@ -219,6 +247,7 @@ footer {
     header { padding: 16px; }
     .chat-input { flex-wrap: wrap; }
     .chat-input button { width: 100%; }
+    .account { width: 100%; }
 }
 </style>
 </head>
@@ -227,8 +256,17 @@ footer {
 <div id="app">
 <header>
     <div class="logo">Vibe<span>Chat</span> ✨</div>
+
     <div class="account">
         <span class="online">● Test sürümü</span>
+
+        <a class="profile-link" href="/profile.html">
+            <img id="headerAvatar" class="profile-avatar"
+                 alt="Profil fotoğrafı"
+                 src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%23292042'/%3E%3Ccircle cx='50' cy='38' r='19' fill='%23c4b5fd'/%3E%3Cellipse cx='50' cy='91' rx='35' ry='30' fill='%23c4b5fd'/%3E%3C/svg%3E">
+            <span id="headerUsername">Profilim</span>
+        </a>
+
         <span id="userEmail"></span>
         <button class="logout" id="logoutBtn">Çıkış Yap</button>
     </div>
@@ -308,10 +346,43 @@ const supabase = createClient(
 const app = document.getElementById("app");
 const userEmail = document.getElementById("userEmail");
 const logoutBtn = document.getElementById("logoutBtn");
+const headerUsername = document.getElementById("headerUsername");
+const headerAvatar = document.getElementById("headerAvatar");
 
 let localStream = null;
 const statusBox = document.getElementById("status");
 const localVideo = document.getElementById("localVideo");
+
+async function loadProfile(userId) {
+    try {
+        const { data, error } = await supabase
+            .from("profiles")
+            .select("username,avatar_url")
+            .eq("id", userId)
+            .maybeSingle();
+
+        if (error) throw error;
+
+        if (data?.username) {
+            headerUsername.textContent = data.username;
+        }
+
+        if (data?.avatar_url) {
+            const { data: imageData, error: imageError } =
+                await supabase.storage
+                    .from("avatars")
+                    .createSignedUrl(data.avatar_url, 3600);
+
+            if (imageError) throw imageError;
+
+            if (imageData?.signedUrl) {
+                headerAvatar.src = imageData.signedUrl;
+            }
+        }
+    } catch (error) {
+        console.error("Profil yüklenemedi:", error);
+    }
+}
 
 async function checkLogin() {
     try {
@@ -322,8 +393,10 @@ async function checkLogin() {
             return;
         }
 
-        userEmail.textContent = "👤 " + (data.user.email || "Hesabım");
+        userEmail.textContent = data.user.email || "";
         app.style.display = "block";
+
+        await loadProfile(data.user.id);
     } catch (error) {
         console.error("Oturum kontrolü başarısız:", error);
         window.location.replace("/login.html");
