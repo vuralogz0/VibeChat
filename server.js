@@ -9,6 +9,14 @@ const io = new Server(server);
 
 app.use(express.static("public"));
 
+app.get("/login.html", (req, res) => {
+    res.sendFile("login.html", { root: "public" });
+});
+
+app.get("/signup.html", (req, res) => {
+    res.sendFile("signup.html", { root: "public" });
+});
+
 const CHAT_DURATION = 5 * 60 * 1000;
 const waitingUsers = new Set();
 const sessions = new Map();
