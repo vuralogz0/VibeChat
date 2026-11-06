@@ -16,6 +16,10 @@ app.get("/login.html", (req, res) => {
 app.get("/signup.html", (req, res) => {
     res.sendFile("signup.html", { root: "public" });
 });
+app.get("/profile.html", (req, res) => {
+    res.sendFile("profile.html", { root: "public" });
+});
+
 
 const CHAT_DURATION = 5 * 60 * 1000;
 const waitingUsers = new Set();
