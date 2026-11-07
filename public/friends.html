@@ -205,17 +205,20 @@ async function refresh() {
     r.sender_id === me ? r.receiver_id : r.sender_id
   ))];
 
-  let names = {};
-  if (ids.length) {
-    const { data: profiles } = await supabase
-      .from("profiles")
-      .select("id,username")
-      .in("id", ids);
+  
+let names = {};
+if (ids.length) {
+  const { data: profiles, error: profileError } =
+    await supabase.rpc("get_vibechat_friend_profiles");
 
+  if (profileError) {
+    showMessage("İsimler alınamadı: " + profileError.message);
+  } else {
     for (const p of profiles || []) {
       names[p.id] = p.username;
     }
   }
+}
 
   el("requests").replaceChildren();
   el("friends").replaceChildren();
