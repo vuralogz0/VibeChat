@@ -1,4 +1,5 @@
 
+
 <!DOCTYPE html>
 <html lang="tr">
 <head>
@@ -47,13 +48,14 @@ label {
   text-align: left;
   margin: 18px 0 8px;
 }
-input {
+input, select {
   width: 100%;
   padding: 13px;
   border-radius: 12px;
   border: 1px solid #7654a3;
   background: #17142e;
   color: white;
+  font-size: 15px;
 }
 button {
   width: 100%;
@@ -70,7 +72,11 @@ button {
 button:disabled { opacity: .5; cursor: wait; }
 .secondary { background: #514178; }
 a { color: #d8b4fe; }
-#message { min-height: 20px; color: #e9d5ff; }
+#message {
+  min-height: 20px;
+  color: #e9d5ff;
+  line-height: 1.5;
+}
 #profile { display: none; }
 small { color: #ddd6fe; }
 </style>
@@ -94,7 +100,30 @@ small { color: #ddd6fe; }
       placeholder="Kullanıcı adını yaz"
       autocomplete="off">
 
-    <button id="saveBtn">💾 Profili Kaydet</button>
+    <label for="gender">Cinsiyetin</label>
+    <select id="gender">
+      <option value="">Seçiniz</option>
+      <option value="female">👩 Kadın</option>
+      <option value="male">👨 Erkek</option>
+    </select>
+
+    <label for="matchPreference">
+      Sohbet etmek istediğin kişiler
+    </label>
+    <select id="matchPreference">
+      <option value="everyone">🌍 Herkes</option>
+      <option value="female">👩 Kadın</option>
+      <option value="male">👨 Erkek</option>
+    </select>
+
+    <small>
+      Tercihlerin kaydedilir. Rastgele eşleşme
+      özelliği henüz aktif değildir.
+    </small>
+
+    <button id="saveBtn">
+      💾 Profili ve Tercihleri Kaydet
+    </button>
 
     <label for="photo">Profil fotoğrafı seç</label>
     <input id="photo" type="file"
@@ -124,6 +153,7 @@ const $ = id => document.getElementById(id);
 const message = $("message");
 const avatar = $("avatar");
 const placeholder = avatar.src;
+
 let user = null;
 let photoPath = null;
 
@@ -158,7 +188,7 @@ async function init() {
 
     const result = await supabase
       .from("profiles")
-      .select("username,avatar_url")
+      .select("username,avatar_url,gender,match_preference")
       .eq("id", user.id)
       .maybeSingle();
 
@@ -167,6 +197,9 @@ async function init() {
     if (result.data) {
       $("username").value = result.data.username || "";
       photoPath = result.data.avatar_url;
+      $("gender").value = result.data.gender || "";
+      $("matchPreference").value =
+        result.data.match_preference || "everyone";
     }
 
     await loadAvatar();
@@ -181,11 +214,23 @@ $("saveBtn").addEventListener("click", async () => {
   if (!user) return;
 
   const username = $("username").value.trim();
+  const gender = $("gender").value;
+  const match_preference = $("matchPreference").value;
 
   if (!/^[a-zA-Z0-9_]{3,20}$/.test(username)) {
     showMessage(
       "Kullanıcı adı 3-20 karakter olmalı. Harf, rakam ve _ kullan."
     );
+    return;
+  }
+
+  if (!["female", "male"].includes(gender)) {
+    showMessage("Lütfen cinsiyetini seç.");
+    return;
+  }
+
+  if (!["female", "male", "everyone"].includes(match_preference)) {
+    showMessage("Geçerli bir sohbet tercihi seç.");
     return;
   }
 
@@ -196,11 +241,14 @@ $("saveBtn").addEventListener("click", async () => {
       .from("profiles")
       .upsert({
         id: user.id,
-        username
+        username,
+        gender,
+        match_preference
       }, { onConflict: "id" });
 
     if (error) throw error;
-    showMessage("Kullanıcı adın kaydedildi! ✅");
+
+    showMessage("Profilin ve sohbet tercihlerin kaydedildi! ✅");
   } catch (error) {
     showMessage("Kaydedilemedi: " + error.message);
   } finally {
@@ -230,7 +278,6 @@ $("uploadBtn").addEventListener("click", async () => {
   }
 
   $("uploadBtn").disabled = true;
-
   const path = `${user.id}/avatar.${types[file.type]}`;
 
   try {
