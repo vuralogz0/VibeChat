@@ -1,0 +1,292 @@
+
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Özel Mesajlar | VibeChat</title>
+<style>
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: #101827;
+  color: white;
+  font-family: Arial, sans-serif;
+}
+main {
+  max-width: 650px;
+  margin: auto;
+  padding: 16px;
+}
+a { color: #c4b5fd; }
+h1 { color: #a78bfa; }
+#status { color: #cbd5e1; }
+#messages {
+  height: 55vh;
+  overflow-y: auto;
+  background: #1e293b;
+  border-radius: 14px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.message {
+  padding: 10px 14px;
+  border-radius: 14px;
+  max-width: 80%;
+  overflow-wrap: anywhere;
+  background: #334155;
+  align-self: flex-start;
+}
+.mine {
+  background: #7c3aed;
+  align-self: flex-end;
+}
+.message small {
+  display: block;
+  margin-top: 5px;
+  opacity: .75;
+}
+form {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+input {
+  flex: 1;
+  min-width: 0;
+  padding: 14px;
+  border: none;
+  border-radius: 10px;
+}
+button {
+  background: #7c3aed;
+  color: white;
+  border: none;
+  padding: 12px 18px;
+  border-radius: 10px;
+  cursor: pointer;
+}
+button:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+}
+</style>
+</head>
+<body>
+<main>
+  <a href="/friends.html">← Arkadaşlarım</a>
+  <h1 id="title">💜 Özel Mesajlar</h1>
+  <p id="status">Hesabın kontrol ediliyor...</p>
+
+  <div id="messages" aria-live="polite"></div>
+
+  <form id="messageForm">
+    <input
+      id="messageInput"
+      placeholder="Mesajını yaz..."
+      maxlength="2000"
+      autocomplete="off"
+      required
+      disabled
+    >
+    <button id="sendButton" type="submit" disabled>
+      Gönder
+    </button>
+  </form>
+</main>
+
+<script type="module">
+import { createClient } from
+  "https://esm.sh/@supabase/supabase-js@2";
+
+const supabase = createClient(
+  "https://orznejzevoclmjqfulzh.supabase.co",
+  "sb_publishable_GnGvKSlRTKL_PUzUAJtatw_uFg2GeP4"
+);
+
+const el = id => document.getElementById(id);
+const params = new URLSearchParams(location.search);
+const friendId = params.get("user");
+
+let me = null;
+let busy = false;
+let loading = false;
+let previousLastId = null;
+let polling = null;
+
+function status(text) {
+  el("status").textContent = text;
+}
+
+function setEnabled(enabled) {
+  el("messageInput").disabled = !enabled;
+  el("sendButton").disabled = !enabled;
+}
+
+function renderMessages(rows) {
+  const container = el("messages");
+  const lastId = rows.at(-1)?.id || null;
+  const shouldScroll =
+    container.scrollTop + container.clientHeight >=
+    container.scrollHeight - 100 ||
+    previousLastId === null;
+
+  container.replaceChildren();
+
+  if (!rows.length) {
+    const p = document.createElement("p");
+    p.textContent = "Henüz mesaj yok. İlk mesajı gönder!";
+    container.append(p);
+  }
+
+  for (const msg of rows) {
+    const bubble = document.createElement("div");
+    bubble.className =
+      "message" + (msg.sender_id === me ? " mine" : "");
+
+    const content = document.createElement("div");
+    content.textContent = msg.content;
+
+    const time = document.createElement("small");
+    time.textContent = new Date(
+      msg.created_at
+    ).toLocaleTimeString("tr-TR", {
+      hour: "2-digit",
+      minute: "2-digit"
+    });
+
+    bubble.append(content, time);
+    container.append(bubble);
+  }
+
+  if (shouldScroll || lastId !== previousLastId) {
+    container.scrollTop = container.scrollHeight;
+  }
+  previousLastId = lastId;
+}
+
+async function loadMessages() {
+  if (loading || !me || !friendId) return;
+  loading = true;
+
+  try {
+    const { data, error } = await supabase
+      .from("messages")
+      .select("id,sender_id,receiver_id,content,created_at")
+      .or(
+        `and(sender_id.eq.${me},receiver_id.eq.${friendId}),` +
+        `and(sender_id.eq.${friendId},receiver_id.eq.${me})`
+      )
+      .order("created_at", { ascending: false })
+      .limit(100);
+
+    if (error) {
+      status("Mesajlar alınamadı: " + error.message);
+      return;
+    }
+
+    renderMessages((data || []).reverse());
+  } finally {
+    loading = false;
+  }
+}
+
+async function start() {
+  const { data: { user }, error } =
+    await supabase.auth.getUser();
+
+  if (error || !user) {
+    location.href = "/login.html";
+    return;
+  }
+
+  me = user.id;
+
+  if (
+    !friendId ||
+    !/^[0-9a-f]{8}-[0-9a-f-]{27,}$/.test(friendId) ||
+    friendId === me
+  ) {
+    status("Arkadaşlarım sayfasından bir sohbet seç.");
+    return;
+  }
+
+  const { data: friendship, error: friendError } =
+    await supabase
+      .from("friendships")
+      .select("id")
+      .eq("status", "accepted")
+      .or(
+        `and(sender_id.eq.${me},receiver_id.eq.${friendId}),` +
+        `and(sender_id.eq.${friendId},receiver_id.eq.${me})`
+      )
+      .limit(1);
+
+  if (friendError || !friendship?.length) {
+    status("Bu kişiyle kabul edilmiş arkadaşlığın yok.");
+    return;
+  }
+
+  const { data: profiles } = await supabase.rpc(
+    "get_vibechat_friend_profiles"
+  );
+
+  const friend = (profiles || []).find(
+    p => p.id === friendId
+  );
+
+  el("title").textContent =
+    "💬 " + (friend?.username || "Özel Sohbet");
+
+  status("Arkadaşınla özel sohbet");
+  setEnabled(true);
+
+  await loadMessages();
+
+  polling = setInterval(() => {
+    if (!document.hidden) loadMessages();
+  }, 3000);
+}
+
+el("messageForm").addEventListener("submit", async e => {
+  e.preventDefault();
+
+  if (busy || !me || !friendId) return;
+
+  const content = el("messageInput").value.trim();
+  if (!content || content.length > 2000) return;
+
+  busy = true;
+  el("sendButton").disabled = true;
+
+  const { error } = await supabase
+    .from("messages")
+    .insert({
+      sender_id: me,
+      receiver_id: friendId,
+      content
+    });
+
+  busy = false;
+  el("sendButton").disabled = false;
+
+  if (error) {
+    status("Mesaj gönderilemedi: " + error.message);
+    return;
+  }
+
+  el("messageInput").value = "";
+  status("Mesaj gönderildi.");
+  await loadMessages();
+});
+
+window.addEventListener("pagehide", () => {
+  if (polling) clearInterval(polling);
+});
+
+start();
+</script>
+</body>
+</html>
