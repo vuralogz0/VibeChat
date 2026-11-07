@@ -384,11 +384,12 @@ footer {
     <div class="options">
       <label for="gender">Sohbet tercihi:</label>
       <select id="gender" disabled>
-        <option>Herkes</option>
-        <option>Kız</option>
-        <option>Erkek</option>
-      </select>
-      <small>Tercihler henüz aktif değil.</small>
+  <option value="everyone">🌍 Herkes</option>
+  <option value="female">👩 Kadın</option>
+  <option value="male">👨 Erkek</option>
+</select>
+      <a href="/profile.html">💜 Tercihini profilinden değiştir</a>
+<small>Eşleşme sistemi henüz aktif değil.</small>
     </div>
 
     <section class="videos">
@@ -469,7 +470,7 @@ const userEmail = document.getElementById("userEmail");
 const logoutBtn = document.getElementById("logoutBtn");
 const headerUsername = document.getElementById("headerUsername");
 const headerAvatar = document.getElementById("headerAvatar");
-
+const genderSelect = document.getElementById("gender");
 let localStream = null;
 
 const statusBox = document.getElementById("status");
@@ -479,7 +480,7 @@ async function loadProfile(userId) {
   try {
     const { data, error } = await supabase
       .from("profiles")
-      .select("username,avatar_url")
+      .select("username,avatar_url,match_preference")
       .eq("id", userId)
       .maybeSingle();
 
@@ -487,7 +488,9 @@ async function loadProfile(userId) {
 
     if (data?.username) {
       headerUsername.textContent = data.username;
-    }
+    } if (["everyone", "female", "male"].includes(data?.match_preference)) {
+  genderSelect.value = data.match_preference;
+}
 
     if (data?.avatar_url) {
       const { data: imageData, error: imageError } =
