@@ -1,12 +1,15 @@
 
+
 <!DOCTYPE html>
 <html lang="tr">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Hesap Oluştur | VibeChat</title>
+<meta name="description" content="VibeChat'e katıl, yeni arkadaşlıklar kur. Yalnızca 18 yaş ve üzeri kullanıcılar kayıt olabilir.">
 <style>
 * { box-sizing: border-box; }
+
 body {
   margin: 0;
   min-height: 100vh;
@@ -21,6 +24,7 @@ body {
     center / cover fixed;
   padding: 20px;
 }
+
 .card {
   width: 100%;
   max-width: 420px;
@@ -31,10 +35,24 @@ body {
   box-shadow: 0 20px 60px #0008;
   backdrop-filter: blur(15px);
 }
-h1 { text-align: center; margin: 0 0 10px; }
+
+h1 {
+  text-align: center;
+  margin: 0 0 10px;
+}
+
 h1 span { color: #c084fc; }
-.subtitle { text-align: center; color: #ddd6fe; }
-label { display: block; margin: 18px 0 8px; }
+
+.subtitle {
+  text-align: center;
+  color: #ddd6fe;
+}
+
+label {
+  display: block;
+  margin: 18px 0 8px;
+}
+
 input {
   width: 100%;
   padding: 14px;
@@ -44,6 +62,19 @@ input {
   color: white;
   font-size: 15px;
 }
+
+input:focus {
+  outline: none;
+  border-color: #c084fc;
+}
+
+.age-notice {
+  margin-top: 10px;
+  color: #ddd6fe;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
 button {
   width: 100%;
   margin-top: 24px;
@@ -56,33 +87,80 @@ button {
   font-size: 16px;
   cursor: pointer;
 }
-button:disabled { opacity: .6; cursor: wait; }
+
+button:disabled {
+  opacity: .6;
+  cursor: wait;
+}
+
 a { color: #d8b4fe; }
-.bottom { text-align: center; margin-top: 22px; }
-#message { margin-top: 15px; text-align: center; }
+
+.bottom {
+  text-align: center;
+  margin-top: 22px;
+}
+
+#message {
+  margin-top: 15px;
+  text-align: center;
+  line-height: 1.6;
+}
 </style>
 </head>
+
 <body>
 <div class="card">
   <h1>Vibe<span>Chat</span> ✨</h1>
   <p class="subtitle">Yeni hesabını oluştur</p>
 
   <form id="signupForm">
+
     <label for="email">E-posta</label>
-    <input id="email" type="email" autocomplete="email" required>
+    <input
+      id="email"
+      type="email"
+      autocomplete="email"
+      required
+    >
 
     <label for="password">Şifre</label>
-    <input id="password" type="password"
-           minlength="8" autocomplete="new-password" required>
+    <input
+      id="password"
+      type="password"
+      minlength="8"
+      autocomplete="new-password"
+      required
+    >
 
-    <button id="submitBtn" type="submit">Hesap Oluştur</button>
+    <label for="birthdate">🎂 Doğum Tarihi</label>
+    <input
+      id="birthdate"
+      type="date"
+      autocomplete="bday"
+      required
+    >
+
+    <p class="age-notice">
+      🔞 VibeChat yalnızca 18 yaş ve üzeri
+      kullanıcılar içindir.
+    </p>
+
+    <button id="submitBtn" type="submit">
+      Hesap Oluştur
+    </button>
+
   </form>
 
   <p id="message" role="status"></p>
+
   <p class="bottom">
-    Zaten hesabın var mı? <a href="/login.html">Giriş Yap</a>
+    Zaten hesabın var mı?
+    <a href="/login.html">Giriş Yap</a>
   </p>
-  <p class="bottom"><a href="/">Ana sayfaya dön</a></p>
+
+  <p class="bottom">
+    <a href="/welcome.html">Ana sayfaya dön</a>
+  </p>
 </div>
 
 <script type="module">
@@ -97,31 +175,107 @@ const supabase = createClient(
 const form = document.getElementById("signupForm");
 const message = document.getElementById("message");
 const button = document.getElementById("submitBtn");
+const birthdateInput = document.getElementById("birthdate");
+
+// Gelecekte doğum tarihi seçilmesini engelle.
+const today = new Date();
+const todayLocal = [
+  today.getFullYear(),
+  String(today.getMonth() + 1).padStart(2, "0"),
+  String(today.getDate()).padStart(2, "0")
+].join("-");
+
+birthdateInput.max = todayLocal;
+
+function isAtLeast18(dateString) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
+    return false;
+  }
+
+  const [year, month, day] =
+    dateString.split("-").map(Number);
+
+  const birthDate = new Date(year, month - 1, day);
+
+  // Geçersiz tarihleri reddet.
+  if (
+    birthDate.getFullYear() !== year ||
+    birthDate.getMonth() !== month - 1 ||
+    birthDate.getDate() !== day
+  ) {
+    return false;
+  }
+
+  const now = new Date();
+
+  if (birthDate > now) {
+    return false;
+  }
+
+  let age = now.getFullYear() - year;
+
+  const birthdayPassed =
+    now.getMonth() + 1 > month ||
+    (
+      now.getMonth() + 1 === month &&
+      now.getDate() >= day
+    );
+
+  if (!birthdayPassed) {
+    age--;
+  }
+
+  return age >= 18;
+}
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
-  button.disabled = true;
-  message.textContent = "Hesap oluşturuluyor...";
 
-  const email = document.getElementById("email").value.trim();
-  const password = document.getElementById("password").value;
+  const email =
+    document.getElementById("email").value.trim();
+
+  const password =
+    document.getElementById("password").value;
+
+  const birthdate = birthdateInput.value;
+
+  // 18 yaş kontrolü.
+  if (!isAtLeast18(birthdate)) {
+    message.style.color = "#fca5a5";
+    message.textContent =
+      "🔞 Üzgünüz! VibeChat'e kayıt olmak için " +
+      "en az 18 yaşında olmalısın.";
+    return;
+  }
+
+  button.disabled = true;
+  message.style.color = "#ddd6fe";
+  message.textContent = "Hesap oluşturuluyor...";
 
   try {
     const { error } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        emailRedirectTo: window.location.origin + "/login.html"
+        emailRedirectTo:
+          window.location.origin + "/login.html"
       }
     });
 
     if (error) throw error;
 
+    message.style.color = "#86efac";
     message.textContent =
-      "Kayıt isteğin alındı. E-postandaki doğrulama bağlantısını aç.";
+      "✅ Kayıt isteğin alındı. " +
+      "E-postandaki doğrulama bağlantısını aç.";
+
     form.reset();
+
   } catch (error) {
-    message.textContent = "Hata: " + error.message;
+    message.style.color = "#fca5a5";
+    message.textContent =
+      "Hata: " + error.message;
+
   } finally {
     button.disabled = false;
   }
