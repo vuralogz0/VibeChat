@@ -1,4 +1,5 @@
 
+
 <!DOCTYPE html>
 <html lang="tr">
 <head>
@@ -42,6 +43,10 @@ button, a.btn {
 .item {
   padding: 12px 0;
   border-bottom: 1px solid #475569;
+}
+.item strong {
+  display: block;
+  margin-bottom: 8px;
 }
 small { color: #cbd5e1; }
 </style>
@@ -100,6 +105,7 @@ function makeItem(name, actions = []) {
     button.onclick = action.run;
     div.append(button);
   }
+
   return div;
 }
 
@@ -119,6 +125,7 @@ async function load() {
 
 window.searchUsers = async function() {
   const name = el("search").value.trim();
+
   if (name.length < 2) {
     showMessage("En az 2 harf yaz.");
     return;
@@ -161,6 +168,7 @@ async function sendRequest(receiverId) {
   showMessage(error
     ? "İstek gönderilemedi: " + error.message
     : "Arkadaşlık isteği gönderildi!");
+
   await refresh();
 }
 
@@ -174,6 +182,7 @@ async function acceptRequest(id) {
   showMessage(error
     ? "İstek kabul edilemedi: " + error.message
     : "Artık arkadaşsınız!");
+
   await refresh();
 }
 
@@ -186,7 +195,13 @@ async function deleteFriendship(id) {
   showMessage(error
     ? "İşlem başarısız: " + error.message
     : "İşlem tamamlandı.");
+
   await refresh();
+}
+
+function openChat(friendId) {
+  location.href =
+    "/chat.html?user=" + encodeURIComponent(friendId);
 }
 
 async function refresh() {
@@ -201,24 +216,27 @@ async function refresh() {
   }
 
   const rows = data || [];
+
   const ids = [...new Set(rows.map(r =>
     r.sender_id === me ? r.receiver_id : r.sender_id
   ))];
 
-  
-let names = {};
-if (ids.length) {
-  const { data: profiles, error: profileError } =
-    await supabase.rpc("get_vibechat_friend_profiles");
+  let names = {};
 
-  if (profileError) {
-    showMessage("İsimler alınamadı: " + profileError.message);
-  } else {
-    for (const p of profiles || []) {
-      names[p.id] = p.username;
+  if (ids.length) {
+    const { data: profiles, error: profileError } =
+      await supabase.rpc("get_vibechat_friend_profiles");
+
+    if (profileError) {
+      showMessage(
+        "İsimler alınamadı: " + profileError.message
+      );
+    } else {
+      for (const p of profiles || []) {
+        names[p.id] = p.username;
+      }
     }
   }
-}
 
   el("requests").replaceChildren();
   el("friends").replaceChildren();
@@ -228,30 +246,52 @@ if (ids.length) {
 
   for (const r of rows) {
     const otherId = r.sender_id === me
-      ? r.receiver_id : r.sender_id;
+      ? r.receiver_id
+      : r.sender_id;
+
     const name = names[otherId] || "Kullanıcı";
 
-    if (r.status === "pending" && r.receiver_id === me) {
+    if (
+      r.status === "pending" &&
+      r.receiver_id === me
+    ) {
       requestCount++;
+
       el("requests").append(makeItem(name, [
-        { label: "✅ Kabul et", run: () => acceptRequest(r.id) },
-        { label: "❌ Reddet", run: () => deleteFriendship(r.id) }
+        {
+          label: "✅ Kabul et",
+          run: () => acceptRequest(r.id)
+        },
+        {
+          label: "❌ Reddet",
+          run: () => deleteFriendship(r.id)
+        }
       ]));
     }
 
     if (r.status === "accepted") {
       friendCount++;
-      el("friends").append(makeItem(name, [{
-        label: "Arkadaşlıktan çıkar",
-        run: () => deleteFriendship(r.id)
-      }]));
+
+      el("friends").append(makeItem(name, [
+        {
+          label: "💬 Mesaj Gönder",
+          run: () => openChat(otherId)
+        },
+        {
+          label: "Arkadaşlıktan çıkar",
+          run: () => deleteFriendship(r.id)
+        }
+      ]));
     }
   }
 
-  if (!requestCount)
+  if (!requestCount) {
     el("requests").textContent = "Gelen istek yok.";
-  if (!friendCount)
+  }
+
+  if (!friendCount) {
     el("friends").textContent = "Henüz arkadaşın yok.";
+  }
 }
 
 load();
