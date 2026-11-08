@@ -1,0 +1,5 @@
+
+User-agent: *
+Allow: /
+
+Sitemap: https://vibechat-kbef.onrender.com/sitemap.xml
