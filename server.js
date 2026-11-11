@@ -9,23 +9,9 @@ const io = new Server(server);
 
 app.use(express.static("public"));
 
-app.get("/login.html", (req, res) => {
-  res.sendFile("login.html", { root: "public" });
-});
-
-app.get("/signup.html", (req, res) => {
-  res.sendFile("signup.html", { root: "public" });
-});
-
-app.get("/profile.html", (req, res) => {
-  res.sendFile("profile.html", { root: "public" });
-});
-
-// Supabase proje adresi
 const SUPABASE_URL =
   "https://orznejzevoclmjqfulzh.supabase.co";
 
-// Render Environment ayarlarından okunur
 const TEST_USERS = new Set(
   [
     process.env.TEST_USER_1,
@@ -37,7 +23,6 @@ const CHAT_DURATION = 5 * 60 * 1000;
 
 const waitingUsers = new Set();
 const sessions = new Map();
-const recentPartners = new Map();
 
 async function verifyUser(token) {
   if (!token || typeof token !== "string") {
@@ -50,7 +35,8 @@ async function verifyUser(token) {
       {
         headers: {
           Authorization: `Bearer ${token}`,
-          apikey: process.env.SUPABASE_PUBLISHABLE_KEY || ""
+          apikey:
+            process.env.SUPABASE_PUBLISHABLE_KEY || ""
         },
         signal: AbortSignal.timeout(8000)
       }
@@ -66,15 +52,16 @@ async function verifyUser(token) {
 
     return user;
   } catch (error) {
-    console.error("Kimlik doğrulama hatası:", error.message);
+    console.error(
+      "Kimlik doğrulama hatası:",
+      error.message
+    );
     return null;
   }
 }
 
-// Her Socket.IO bağlantısını doğrula
 io.use(async (socket, next) => {
   const token = socket.handshake.auth?.token;
-
   const user = await verifyUser(token);
 
   if (!user) {
@@ -83,7 +70,6 @@ io.use(async (socket, next) => {
     );
   }
 
-  // Aynı hesapla iki farklı bağlantıyı engelle
   const alreadyConnected = [...io.sockets.sockets.values()]
     .some(s => s.data.userId === user.id);
 
@@ -132,13 +118,6 @@ function findPartner(socket) {
       continue;
     }
 
-    if (
-      recentPartners.get(socket.id) === id ||
-      recentPartners.get(id) === socket.id
-    ) {
-      continue;
-    }
-
     waitingUsers.delete(id);
 
     const session = {
@@ -149,9 +128,6 @@ function findPartner(socket) {
 
     sessions.set(socket.id, session);
     sessions.set(id, session);
-
-    recentPartners.set(socket.id, id);
-    recentPartners.set(id, socket.id);
 
     session.timer = setTimeout(() => {
       endChat(socket.id, "timeout");
@@ -177,7 +153,10 @@ function findPartner(socket) {
 }
 
 io.on("connection", socket => {
-  console.log("Test kullanıcısı bağlandı:", socket.id);
+  console.log(
+    "Test kullanıcısı bağlandı:",
+    socket.id
+  );
 
   socket.on("randomMatch", () => {
     findPartner(socket);
@@ -210,14 +189,18 @@ io.on("connection", socket => {
   socket.on("disconnect", () => {
     removeWaiting(socket.id);
     endChat(socket.id, "disconnected");
-    recentPartners.delete(socket.id);
 
-    console.log("Kullanıcı ayrıldı:", socket.id);
+    console.log(
+      "Kullanıcı ayrıldı:",
+      socket.id
+    );
   });
 });
 
 const PORT = process.env.PORT || 3000;
 
 server.listen(PORT, "0.0.0.0", () => {
-  console.log("VibeChat test sunucusu çalışıyor!");
+  console.log(
+    "VibeChat test sunucusu çalışıyor!"
+  );
 });
