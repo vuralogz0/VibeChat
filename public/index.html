@@ -333,6 +333,100 @@ footer {
   .chat-input { flex-wrap: wrap; }
   .chat-input button { width: 100%; }
 }
+/* VibeChat - Tek ekran goruntulu sohbet */
+
+.videos {
+  position: relative;
+  display: block;
+  width: 100%;
+  overflow: hidden;
+  border-radius: 22px;
+  background: #080718;
+}
+
+.videos .video-card:nth-child(2) {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 22px;
+  overflow: hidden;
+}
+
+#remoteVideo {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border-radius: 22px;
+}
+
+.videos .video-card:nth-child(2) .video-label {
+  display: none;
+}
+
+.videos .video-card:nth-child(1) {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 25%;
+  max-width: 200px;
+  z-index: 10;
+  padding: 4px;
+  border-radius: 14px;
+  background: #18132e;
+  box-shadow: 0 8px 25px #0009;
+}
+
+#localVideo {
+  display: block;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+  border-radius: 10px;
+  transform: scaleX(-1);
+}
+
+.videos .video-card:nth-child(1) .video-label {
+  font-size: 11px;
+  padding: 5px;
+  text-align: center;
+}
+
+@media (max-width: 760px) {
+  main {
+    padding: 12px 8px 28px;
+  }
+
+  .hero {
+    display: none;
+  }
+
+  .panel {
+    padding: 8px;
+  }
+
+  #remoteVideo {
+    aspect-ratio: 3 / 4;
+  }
+
+  .videos .video-card:nth-child(1) {
+    width: 29%;
+    top: 10px;
+    right: 10px;
+  }
+
+  .controls {
+    gap: 8px;
+    margin-top: 12px;
+  }
+
+  .controls button {
+    flex: 1 1 auto;
+    padding: 12px 8px;
+    font-size: 12px;
+  }
+}
+
 </style>
 </head>
 
