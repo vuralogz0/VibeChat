@@ -1,4 +1,3 @@
-
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
@@ -144,7 +143,7 @@ async function isBlocked(userA, userB) {
   params.set("select", "id");
   params.set(
     "or",
-    `and(blocker_id.eq.${userA},blocked_id.eq.${userB}),and(blocker_id.eq.${userB},blocked_id.eq.${userA})`
+    `(and(blocker_id.eq.${userA},blocked_id.eq.${userB}),and(blocker_id.eq.${userB},blocked_id.eq.${userA}))`
   );
 
   params.set("limit", "1");
