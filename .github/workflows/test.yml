@@ -1,0 +1,30 @@
+
+name: VibeChat Kod Kontrolu
+
+on:
+  push:
+    branches:
+      - vibechat-coklu-kullanici
+  pull_request:
+    branches:
+      - goruntulu-sohbet-test
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Kodu indir
+        uses: actions/checkout@v4
+
+      - name: Node.js kur
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+
+      - name: Paketleri kur
+        run: npm ci
+
+      - name: JavaScript kodunu kontrol et
+        run: node --check server.js
