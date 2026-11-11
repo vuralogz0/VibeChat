@@ -1,3 +1,4 @@
+
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
@@ -17,13 +18,6 @@ const PUBLISHABLE_KEY =
 const SERVICE_KEY =
   process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-const TEST_USERS = new Set(
-  [
-    process.env.TEST_USER_1,
-    process.env.TEST_USER_2
-  ].filter(Boolean)
-);
-
 const CHAT_DURATION = 5 * 60 * 1000;
 
 const waitingUsers = new Set();
@@ -31,8 +25,6 @@ const sessions = new Map();
 
 let matchingBusy = false;
 
-// Supabase yeni sb_secret anahtarı:
-// Yalnızca sunucuda, apikey başlığında kullanılır.
 function adminHeaders() {
   if (!SERVICE_KEY) {
     throw new Error("Supabase gizli anahtarı eksik.");
@@ -58,7 +50,6 @@ async function supabaseRequest(path, options = {}) {
   );
 
   if (!response.ok) {
-    // Gizli anahtar veya kullanıcı bilgileri loglanmaz.
     console.error(
       "Supabase REST hatası:",
       response.status,
@@ -73,7 +64,7 @@ async function supabaseRequest(path, options = {}) {
   return response;
 }
 
-// Giriş yapan kullanıcıyı doğrula.
+// Supabase hesabını doğrula.
 async function verifyUser(token) {
   if (!token || typeof token !== "string") {
     return null;
@@ -95,7 +86,7 @@ async function verifyUser(token) {
 
     const user = await response.json();
 
-    if (!user.id || !TEST_USERS.has(user.id)) {
+    if (!user.id || !user.email_confirmed_at) {
       return null;
     }
 
@@ -110,14 +101,16 @@ async function verifyUser(token) {
   }
 }
 
-// Yalnızca iki yetkili test hesabı bağlanabilir.
+// Doğrulanmış kullanıcılar bağlanabilir.
 io.use(async (socket, next) => {
   const token = socket.handshake.auth?.token;
   const user = await verifyUser(token);
 
   if (!user) {
     return next(
-      new Error("Bu hesap test için yetkili değil.")
+      new Error(
+        "Giriş yapmalı ve e-postanı doğrulamalısın."
+      )
     );
   }
 
@@ -136,7 +129,7 @@ io.use(async (socket, next) => {
   next();
 });
 
-// İki kullanıcıdan biri diğerini engellemiş mi?
+// Kullanıcılar birbirini engellemiş mi?
 async function isBlocked(userA, userB) {
   const params = new URLSearchParams();
 
@@ -157,7 +150,7 @@ async function isBlocked(userA, userB) {
   return rows.length > 0;
 }
 
-// Engelleme kaydı.
+// Kullanıcı engelleme.
 async function saveBlock(blockerId, blockedId) {
   await supabaseRequest(
     "user_blocks?on_conflict=blocker_id,blocked_id",
@@ -175,7 +168,7 @@ async function saveBlock(blockerId, blockedId) {
   );
 }
 
-// Şikâyet kaydı.
+// Kullanıcı şikâyeti.
 async function saveReport(
   reporterId,
   reportedId,
@@ -267,12 +260,10 @@ function startChat(socketA, socketB) {
     duration: 300
   });
 
-  console.log("İki test kullanıcısı eşleşti.");
+  console.log("İki kullanıcı eşleşti.");
 }
 
-// Tek eşleştirme döngüsü kullanılır.
-// Böylece iki telefonun aynı anda işlem başlatması
-// eşleşme kilidini bozmaz.
+// Rastgele eşleştirme.
 async function processMatching() {
   if (matchingBusy) return;
 
@@ -381,7 +372,7 @@ function findPartner(socket) {
 
 io.on("connection", socket => {
   console.log(
-    "Test kullanıcısı bağlandı:",
+    "Kullanıcı bağlandı:",
     socket.data.userId
   );
 
@@ -389,7 +380,7 @@ io.on("connection", socket => {
     findPartner(socket);
   });
 
-  // WebRTC görüntü ve ses sinyalleri.
+  // Görüntü ve ses sinyalleri.
   socket.on("signal", data => {
     const session = sessions.get(socket.id);
 
@@ -428,8 +419,6 @@ io.on("connection", socket => {
         partner.data.userId
       );
 
-      // Bu sırada başka bir görüşme başlamışsa
-      // yeni görüşmeyi yanlışlıkla sonlandırma.
       if (sessions.get(socket.id) === session) {
         endChat(socket.id, "blocked");
       }
@@ -516,7 +505,7 @@ io.on("connection", socket => {
 app.get("/health", (req, res) => {
   res.json({
     status: "ok",
-    service: "VibeChat test server"
+    service: "VibeChat server"
   });
 });
 
