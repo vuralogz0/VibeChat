@@ -1,8 +1,3 @@
-
-   
-
-
-
 <!DOCTYPE html>
 <html lang="tr">
 <head>
@@ -389,7 +384,7 @@ footer {
   <option value="male">👨 Erkek</option>
 </select>
       <a href="/profile.html">💜 Tercihini profilinden değiştir</a>
-<small>Eşleşme sistemi henüz aktif değil.</small>
+<small>Yalnızca izin verilen iki hesapla özel görüntülü sohbet testi.</small>
     </div>
 
     <section class="videos">
@@ -434,7 +429,7 @@ footer {
     <section class="chat">
       <h3>💬 Sohbet</h3>
       <div class="messages" id="messages">
-        Mesajlaşma özelliği hazırlanıyor.
+        Görüntülü sohbet testi aktif. Yazılı mesajlaşma hazırlanıyor.
       </div>
       <div class="chat-input">
         <input placeholder="Mesaj yaz..." disabled>
@@ -456,6 +451,7 @@ footer {
 </footer>
 </div>
 
+<script src="/socket.io/socket.io.js"></script>
 <script type="module">
 import { createClient } from
   "https://esm.sh/@supabase/supabase-js@2";
@@ -475,6 +471,179 @@ let localStream = null;
 
 const statusBox = document.getElementById("status");
 const localVideo = document.getElementById("localVideo");
+const remoteVideo = document.getElementById("remoteVideo");
+const timerBox = document.getElementById("timer");
+let socket = null;
+let peer = null;
+let partnerId = null;
+let countdown = null;
+let remainingSeconds = 300;
+let pendingCandidates = [];
+
+function showStatus(message) {
+  statusBox.textContent = message;
+}
+
+function updateTimer() {
+  const minutes = String(Math.floor(remainingSeconds / 60)).padStart(2, "0");
+  const seconds = String(remainingSeconds % 60).padStart(2, "0");
+  timerBox.textContent = `${minutes}:${seconds}`;
+}
+
+function stopTimer() {
+  clearInterval(countdown);
+  countdown = null;
+  remainingSeconds = 300;
+  updateTimer();
+}
+
+function closePeer() {
+  if (peer) {
+    peer.close();
+    peer = null;
+  }
+  partnerId = null;
+  pendingCandidates = [];
+  remoteVideo.srcObject = null;
+  stopTimer();
+}
+
+function startTimer() {
+  stopTimer();
+  countdown = setInterval(() => {
+    remainingSeconds = Math.max(0, remainingSeconds - 1);
+    updateTimer();
+    if (remainingSeconds === 0) {
+      stopTimer();
+      showStatus("5 dakikalık görüşme sona erdi.");
+    }
+  }, 1000);
+}
+
+async function flushCandidates() {
+  if (!peer || !peer.remoteDescription) return;
+  const candidates = pendingCandidates.splice(0);
+  for (const candidate of candidates) {
+    try {
+      await peer.addIceCandidate(candidate);
+    } catch (error) {
+      console.error("ICE hatası:", error);
+    }
+  }
+}
+
+function createPeer() {
+  if (!localStream || !partnerId) return;
+  peer = new RTCPeerConnection({
+    iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
+  });
+  localStream.getTracks().forEach(track => peer.addTrack(track, localStream));
+  peer.ontrack = event => {
+    remoteVideo.srcObject = event.streams[0];
+    remoteVideo.play().catch(() => {
+      showStatus("Karşı tarafın sesini açmak için videoya dokun.");
+    });
+  };
+  peer.onicecandidate = event => {
+    if (event.candidate && socket?.connected && partnerId) {
+      socket.emit("signal", {
+        to: partnerId,
+        signal: { type: "candidate", candidate: event.candidate }
+      });
+    }
+  };
+  peer.onconnectionstatechange = () => {
+    if (peer?.connectionState === "connected") {
+      showStatus("Görüntülü görüşme başladı!");
+    } else if (["failed", "disconnected"].includes(peer?.connectionState)) {
+      showStatus("Görüntü bağlantısı kesildi. Ağ bağlantısını kontrol et.");
+    }
+  };
+}
+
+async function handleSignal(message) {
+  if (!peer || message.from !== partnerId || !message.signal) return;
+  const signal = message.signal;
+  try {
+    if (signal.type === "offer") {
+      await peer.setRemoteDescription(signal.description);
+      await flushCandidates();
+      const answer = await peer.createAnswer();
+      await peer.setLocalDescription(answer);
+      socket.emit("signal", {
+        to: partnerId,
+        signal: { type: "answer", description: peer.localDescription }
+      });
+    } else if (signal.type === "answer") {
+      await peer.setRemoteDescription(signal.description);
+      await flushCandidates();
+    } else if (signal.type === "candidate" && signal.candidate) {
+      if (peer.remoteDescription) {
+        await peer.addIceCandidate(signal.candidate);
+      } else {
+        pendingCandidates.push(signal.candidate);
+      }
+    }
+  } catch (error) {
+    console.error("Görüşme sinyal hatası:", error);
+    showStatus("Görüntülü bağlantı kurulamadı: " + error.message);
+  }
+}
+
+async function connectTestSocket() {
+  if (socket?.connected) return socket;
+  const { data, error } = await supabase.auth.getSession();
+  if (error || !data.session?.access_token) {
+    throw new Error("Oturum bulunamadı. Yeniden giriş yap.");
+  }
+  if (socket) socket.disconnect();
+  socket = io({
+    autoConnect: false,
+    reconnection: false,
+    auth: { token: data.session.access_token }
+  });
+  socket.on("waiting", () => showStatus("Diğer test hesabı bekleniyor..."));
+  socket.on("matched", async data => {
+    try {
+      closePeer();
+      partnerId = data.peerId;
+      createPeer();
+      startTimer();
+      showStatus("Eşleşme bulundu, görüntü bağlantısı kuruluyor...");
+      if (data.initiator) {
+        const offer = await peer.createOffer();
+        await peer.setLocalDescription(offer);
+        socket.emit("signal", {
+          to: partnerId,
+          signal: { type: "offer", description: peer.localDescription }
+        });
+      }
+    } catch (error) {
+      console.error(error);
+      showStatus("Eşleşme başlatılamadı: " + error.message);
+    }
+  });
+  socket.on("signal", handleSignal);
+  socket.on("chatEnded", data => {
+    closePeer();
+    showStatus(data.reason === "timeout"
+      ? "5 dakika doldu. Görüşme sona erdi."
+      : "Görüşme sona erdi. Tekrar Kişi Bul'a basabilirsin.");
+  });
+  socket.on("statusMessage", data => showStatus(data.message));
+  socket.on("disconnect", () => {
+    closePeer();
+    showStatus("Test sunucusuyla bağlantı kesildi.");
+  });
+  return await new Promise((resolve, reject) => {
+    socket.once("connect", () => resolve(socket));
+    socket.once("connect_error", error => {
+      socket.disconnect();
+      reject(error);
+    });
+    socket.connect();
+  });
+}
 
 async function loadProfile(userId) {
   try {
@@ -533,6 +702,8 @@ logoutBtn.addEventListener("click", async () => {
   logoutBtn.disabled = true;
 
   try {
+    if (socket) socket.disconnect();
+    closePeer();
     if (localStream) {
       localStream.getTracks().forEach(track => track.stop());
       localStream = null;
@@ -552,6 +723,7 @@ window.startCamera = async function () {
   try {
     if (localStream) {
       localStream.getTracks().forEach(track => track.stop());
+      closePeer();
     }
 
     localStream = await navigator.mediaDevices.getUserMedia({
@@ -567,15 +739,32 @@ window.startCamera = async function () {
   }
 };
 
-window.findPartner = function () {
-  statusBox.textContent =
-    "Güvenlik kontrolleri tamamlanana kadar eşleşme kapalı.";
+window.findPartner = async function () {
+  try {
+    if (!localStream) await window.startCamera();
+    if (!localStream) return;
+    showStatus("Özel test sunucusuna bağlanılıyor...");
+    const connection = await connectTestSocket();
+    closePeer();
+    connection.emit("randomMatch");
+  } catch (error) {
+    showStatus("Test bağlantısı kurulamadı: " + error.message);
+  }
 };
 
 window.nextPerson = function () {
-  statusBox.textContent =
-    "Sonraki kişi özelliği test aşamasında.";
+  if (!socket?.connected) {
+    showStatus("Önce Kişi Bul butonuna bas.");
+    return;
+  }
+  closePeer();
+  socket.emit("nextPerson");
+  showStatus("Yeni test eşleşmesi bekleniyor...");
 };
+
+remoteVideo.addEventListener("click", () => {
+  remoteVideo.play().catch(console.error);
+});
 
 checkLogin();
 </script>
