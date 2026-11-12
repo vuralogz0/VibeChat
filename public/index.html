@@ -203,8 +203,12 @@ video {
   border-radius: 15px;
 }
 
-/* Kamera sağ-sol düzeltmesi */
+/* Kamera aynalama kontrolü */
 #localVideo {
+  transform: none;
+}
+
+#localVideo.mirrored {
   transform: scaleX(-1);
 }
 
@@ -419,7 +423,9 @@ footer {
               onclick="startCamera()">
         📷 Kamerayı Aç
       </button>
-
+<button class="camera" onclick="toggleMirror()">
+  🔄 Kamerayı Aynala
+</button>
       <button class="match"
               onclick="findPartner()">
         🎲 Kişi Bul
@@ -576,7 +582,14 @@ window.nextPerson = function () {
   statusBox.textContent =
     "Sonraki kişi özelliği test aşamasında.";
 };
+const savedMirror = localStorage.getItem("vibechatMirror");
 
+localVideo.classList.toggle("mirrored", savedMirror === "true");
+
+window.toggleMirror = function () {
+  const mirrored = localVideo.classList.toggle("mirrored");
+  localStorage.setItem("vibechatMirror", String(mirrored));
+};
 checkLogin();
 </script>
 </body>
